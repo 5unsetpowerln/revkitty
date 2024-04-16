@@ -11,13 +11,11 @@ pub struct Session {
     pub username: String,
     pub address: SocketAddr,
     pub socket: std::net::TcpStream,
-    pub ignored_prompt: Vec<u8>,
+    pub pwd: String,
 }
 
 impl Session {
     pub fn new(socket: std::net::TcpStream, sessions: &[Session]) -> Self {
-        use std::io::BufReader;
-        use std::io::BufWriter;
         let id = if let Some(s) = sessions.last() {
             s.id + 1
         } else {
@@ -25,18 +23,16 @@ impl Session {
         };
 
         let mut socket = socket;
-        let mut username = "unknown".to_string();
+        Self::read_until_term_window_title(&mut socket);
+
         let address = socket.peer_addr().unwrap();
-        let mut ignored_prompt = Vec::new();
 
-        let ignored_part = Self::read_all_without_output(&mut socket);
-        ignored_prompt.extend(ignored_part);
-        let ignored_part = Self::read_all_without_output(&mut socket);
-        ignored_prompt.extend(ignored_part);
+        let username = Self::enter_command(&mut socket, b"whoami\n")
+            .trim()
+            .to_string();
 
-        // Self::init_socket(&mut socket);
-        username = Self::enter_command_without_output(&mut socket, b"whoami\n", &ignored_prompt)
-            .trim_end()
+        let pwd = Self::enter_command(&mut socket, b"pwd\n")
+            .trim()
             .to_string();
 
         Session {
@@ -44,11 +40,17 @@ impl Session {
             username,
             address,
             socket,
-            ignored_prompt,
+            pwd,
         }
     }
 
-    // execute command with output
+    pub fn update_pwd(&mut self) {
+        let pwd = Self::enter_command(&mut self.socket, b"pwd\n")
+            .trim()
+            .to_string();
+        self.pwd = pwd
+    }
+
     pub fn exec_command(&mut self, command: &str) {
         let command = if command.ends_with('\n') {
             command.to_string()
@@ -56,38 +58,61 @@ impl Session {
             command.to_owned() + "\n"
         };
 
-        Self::enter_command_without_output(
-            &mut self.socket,
-            command.as_bytes(),
-            &self.ignored_prompt,
-        );
+        self.socket.write_all(command.as_bytes()).unwrap();
+        // let _ = Self::read_all()
+
+        loop {
+            let mut buf = [0; 1024];
+            let len = self.socket.read(&mut buf).unwrap();
+
+            let output = String::from_utf8_lossy(buf.get(..len).unwrap())
+                .split("\u{1b}0;")
+                .collect::<Vec<&str>>()
+                .first()
+                .unwrap()
+                .to_string();
+
+            // if output == command || output == command.strip_suffix('\n').unwrap() {
+                // continue;
+            // }
+
+            print!("{:?}", output);
+            std::io::stdout().flush().unwrap();
+
+            if len == 1024 {
+                continue;
+            }
+            break;
+        }
     }
 
-    fn enter_command_without_output(
-        socket: &mut std::net::TcpStream,
-        command: &[u8],
-        ignored_prompt: &[u8],
-    ) -> String {
+    fn enter_command(socket: &mut std::net::TcpStream, command: &[u8]) -> String {
         socket.write_all(command).unwrap();
 
+        let output =
+            String::from_utf8_lossy(&Self::read_until_term_window_title(socket)).to_string();
+        let output_list = output.split('\n').collect::<Vec<&str>>();
+        output_list
+            .get(1..output_list.len() - 1)
+            .unwrap()
+            .join("\n")
+    }
+
+    fn read_until_term_window_title(socket: &mut std::net::TcpStream) -> Vec<u8> {
         let mut outputs = Vec::new();
 
         loop {
-            let output = Self::read_all_without_output(socket);
+            let output = Self::read_all(socket);
             outputs.extend(&output);
-            for (i, win) in output.windows(ignored_prompt.len()).enumerate() {
-                println!("{:?}", win);
-                if win == ignored_prompt {
-                    return String::from_utf8_lossy(
-                        outputs.get(..outputs.len() - ignored_prompt.len()).unwrap(),
-                    )
-                    .to_string();
+            for (i, w) in outputs.windows(2).enumerate() {
+                if w == [27, 93] {
+                    return outputs[..i].to_vec();
                 }
             }
         }
     }
 
-    fn read_all_without_output(socket: &mut std::net::TcpStream) -> Vec<u8> {
+    fn read_all(socket: &mut std::net::TcpStream) -> Vec<u8> {
         let mut buffer: Vec<u8> = vec![];
         loop {
             let mut buf = [0; 1024];
@@ -98,37 +123,61 @@ impl Session {
             }
             break;
         }
-        // println!("{:?}", buffer);
         buffer
     }
 
-    fn enter_command(socket: &mut std::net::TcpStream, command: &[u8]) {
+    //
+    // with output version
+    //
+    fn enter_command_with_output(socket: &mut std::net::TcpStream, command: &[u8]) -> String {
         socket.write_all(command).unwrap();
 
-        // command name
-        let _ = Self::read_all_without_output(socket);
-        // output
-        let _ = Self::read_all_with_output(socket);
-        // terminal window
-        let _ = Self::read_all_without_output(socket);
-        // prompt
-        let _ = Self::read_all_without_output(socket);
+        let output =
+            String::from_utf8_lossy(&Self::read_until_term_window_title_with_output(socket))
+                .to_string();
+        let output_list = output.split('\n').collect::<Vec<&str>>();
+        output_list
+            .get(1..output_list.len() - 1)
+            .unwrap()
+            .join("\n")
+    }
+
+    fn read_until_term_window_title_with_output(socket: &mut std::net::TcpStream) -> Vec<u8> {
+        let mut outputs = Vec::new();
+
+        loop {
+            let output = Self::read_all_with_output(socket);
+            outputs.extend(&output);
+            for (i, w) in outputs.windows(2).enumerate() {
+                if w == [27, 93] {
+                    return outputs[..i].to_vec();
+                }
+            }
+        }
     }
 
     fn read_all_with_output(socket: &mut std::net::TcpStream) -> Vec<u8> {
         let mut buffer: Vec<u8> = vec![];
         loop {
-            let mut buf = [0; 512];
+            let mut buf = [0; 1024];
             let len = socket.read(&mut buf).unwrap();
-            let new_buf = buf.get(..len).unwrap();
-            println!("{}", String::from_utf8_lossy(new_buf));
-            buffer.extend(new_buf);
+
+            buffer.extend(buf.get(..len).unwrap());
+            let output = String::from_utf8_lossy(buf.get(..len).unwrap())
+                .split("\u{1b}0;")
+                .collect::<Vec<&str>>()
+                .first()
+                .unwrap()
+                .to_string();
+
+            print!("{}", output);
+            std::io::stdout().flush().unwrap();
+
             if len == 1024 {
                 continue;
             }
             break;
         }
-        println!("{:?}", buffer);
         buffer
     }
 }
@@ -140,7 +189,7 @@ impl Clone for Session {
             username: self.username.clone(),
             address: self.address,
             socket: self.socket.try_clone().unwrap(),
-            ignored_prompt: self.ignored_prompt.clone(),
+            pwd: self.pwd.clone(),
         }
     }
 }

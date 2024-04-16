@@ -23,7 +23,7 @@ fn main() {
     'main_loop: loop {
         match app_state.current_shell_ctx {
             ShellContext::Local => {
-                let prompt = format!("{}$ ", util::color::blue("local"));
+                let prompt = format!("{}$ ", util::color::blue(" local"));
                 let readline = rl.readline(&prompt);
 
                 if let Err(e) = &readline {
@@ -67,12 +67,13 @@ fn main() {
                 // let mut current_session = app_state.clone().current_session.unwrap();
 
                 let prompt = format!(
-                    "{}$ ",
-                    crate::util::color::magenta(&format!(
-                        "{}@{}",
+                    "{}:{}$ ",
+                    crate::util::color::red(&format!(
+                        "󰢹 {}@{}",
                         app_state.current_session.username,
                         app_state.current_session.address.ip() // app_state.current_session.unwrap().address.to_string()
-                    ))
+                    )),
+                    crate::util::color::cyan(&app_state.current_session.pwd)
                 );
                 let readline = rl.readline(&prompt);
 
@@ -97,6 +98,7 @@ fn main() {
                 }
 
                 app_state.current_session.exec_command(&line);
+                app_state.current_session.update_pwd();
             }
         };
     }
@@ -191,7 +193,7 @@ fn listen(args: CommandArgs) -> CommandReturns {
             println!(
                 "{}: failed to parse an arg as port: {}",
                 crate::util::color::red("Error"),
-                e.to_string()
+                e
             );
             return CommandReturns::new(true, args.app_state);
         }
@@ -204,8 +206,8 @@ fn listen(args: CommandArgs) -> CommandReturns {
 
     let listener = TcpListener::bind(laddr).unwrap();
 
-    println!("listening on {}", laddr.to_string());
-    let (mut socket, raddr) = listener.accept().unwrap();
+    println!("listening on {}", laddr);
+    let (socket, raddr) = listener.accept().unwrap();
     println!(
         "recieved a connection from {}:{}",
         crate::util::color::cyan(&raddr.ip().to_string()),
@@ -232,13 +234,13 @@ fn initial_listen(port: u16) -> Session {
 
     let listener = TcpListener::bind(laddr).unwrap();
 
-    println!("listening on {}", laddr.to_string());
-    let (mut socket, raddr) = listener.accept().unwrap();
+    println!("listening on {}", laddr);
+    let (socket, raddr) = listener.accept().unwrap();
     println!(
         "recieved a connection from {}:{}",
         crate::util::color::cyan(&raddr.ip().to_string()),
         crate::util::color::magenta(&raddr.port().to_string())
     );
 
-    Session::new(socket, &vec![])
+    Session::new(socket, &[])
 }
