@@ -6,12 +6,12 @@ pub struct Command {
 
 pub struct CommandArgs {
     pub args: Vec<String>,
-    pub app_state: crate::AppState,
+    pub manager: crate::Manager,
 }
 
 pub struct CommandReturns {
     pub is_ok: bool,
-    pub new_app_state: crate::AppState,
+    pub new_manager: crate::Manager,
 }
 
 impl Command {
@@ -29,16 +29,16 @@ impl Command {
 }
 
 impl CommandArgs {
-    pub fn new(args: Vec<String>, app_state: crate::AppState) -> Self {
-        Self { args, app_state }
+    pub fn new(args: Vec<String>, manager: crate::Manager) -> Self {
+        Self { args, manager }
     }
 }
 
 impl CommandReturns {
-    pub fn new(is_ok: bool, new_app_state: crate::AppState) -> Self {
+    pub fn new(is_ok: bool, new_manager: crate::Manager) -> Self {
         Self {
             is_ok,
-            new_app_state,
+            new_manager,
         }
     }
 }
