@@ -7,9 +7,12 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.80"
+async-trait = "0.1.80"
 cli-table = "0.4.7"
 env_logger = "0.11.3"
+futures = "0.3.30"
 log = "0.4.21"
 once_cell = "1.19.0"
 rustyline = "13.0.0"
+tokio = { version = "1.37.0", features = ["full"] }
 # tokio = { version = "1.36.0", features = ["full"] }
