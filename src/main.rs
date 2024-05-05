@@ -1,5 +1,4 @@
 mod command;
-mod connection;
 mod session;
 mod util;
 
