@@ -55,6 +55,9 @@ impl Command for Help {
         display_help();
         CommandReturns::new(true, _args.manager)
     }
+    fn help() {
+        display_help();
+    }
 }
 
 pub struct CommandArgs {
@@ -87,5 +90,6 @@ impl CommandReturns {
 pub trait Command {
     fn name() -> String;
     fn info() -> String;
+    fn help();
     async fn exec(args: CommandArgs) -> CommandReturns;
 }

@@ -16,4 +16,8 @@ impl super::Command for Exit {
         process::exit(0);
         super::CommandReturns::new(true, _args.manager)
     }
+
+    fn help() {
+        println!("{}", Self::info());
+    }
 }

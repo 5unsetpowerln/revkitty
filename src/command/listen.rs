@@ -1,6 +1,9 @@
-use crate::util::tidy_usage;
+use anyhow::anyhow;
+use log::info;
 
-use super::{CommandArgs, CommandReturns};
+use crate::util::{print_error, tidy_usage};
+
+use super::CommandReturns;
 
 pub struct Listen {}
 
@@ -18,35 +21,36 @@ impl super::Command for Listen {
             || (args.args.len() == 1 && args.args[0] == "help")
             || args.args.len() > 2
         {
-            help();
+            Self::help();
             return CommandReturns::new(true, args.manager);
         }
 
         let port = match args.args[0].parse::<u16>() {
             Ok(port) => port,
             Err(e) => {
-                println!(
-                    "{}: failed to parse an arg as port: {}",
-                    crate::util::color::red("Error"),
-                    e
-                );
-                return CommandReturns::new(true, args.manager);
+                print_error("failed to parse an arg as port", anyhow!(e));
+                return CommandReturns::new(false, args.manager);
             }
         };
 
         let mut manager = args.manager;
-        manager.current_session_id = Some(crate::session::new_session(port).await);
+        manager.current_session_id = Some(match crate::session::new_session(port).await {
+            Ok(s) => s,
+            Err(e) => {
+                print_error("failed to create a new session", e);
+                return CommandReturns::new(false, manager);
+            }
+        });
 
         CommandReturns::new(true, manager)
     }
-}
 
-fn help() {
-    println!("listen on a port to receive a reverse shell");
-    println!("Usage:");
-    println!("  {}", tidy_usage("listen <port>", "Listen on a port"));
-    println!(
-        "  {}",
-        tidy_usage("listen <port> -bg", "Listen on a port in background")
-    );
+    fn help() {
+        info!("usage:");
+        println!("  {}", tidy_usage("listen <port>", "Listen on a port"));
+        println!(
+            "  {}",
+            tidy_usage("listen <port> -bg", "Listen on a port in background")
+        );
+    }
 }

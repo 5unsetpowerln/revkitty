@@ -2,17 +2,17 @@ mod command;
 mod session;
 mod util;
 
-use std::{env::args, process, sync::Mutex, thread::current};
-
+use anyhow::anyhow;
 use command::{CommandArgs, CommandReturns};
-use log::{debug, error, info, log_enabled, Level, Metadata, Record};
+use log::Level;
 use std::io::Write;
+use std::process;
+use util::print_error;
 
 use crate::util::color;
 
 #[tokio::main]
 async fn main() {
-    // let commands = get_commands();
     std::env::set_var("RUST_LOG", "info");
 
     let mut manager = Manager::new();
@@ -21,29 +21,29 @@ async fn main() {
 
     env_logger::builder()
         .format(|buf, record| match record.level() {
-            Level::Error => writeln!(buf, "[{}] {}", color::red("+"), record.args()),
-            Level::Debug => writeln!(buf, "[{}] {}", color::green("+"), record.args()),
-            Level::Info => writeln!(buf, "[{}] {}", color::cyan("+"), record.args()),
-            Level::Warn => writeln!(buf, "[{}] {}", color::yellow("+"), record.args()),
-            Level::Trace => writeln!(buf, "[{}] {}", color::white("+"), record.args()),
+            Level::Error => writeln!(buf, "{} {}", color::red("[+]"), record.args()),
+            Level::Debug => writeln!(buf, "{} {}", color::green("[+]"), record.args()),
+            Level::Info => writeln!(buf, "{} {}", color::cyan("[+]"), record.args()),
+            Level::Warn => writeln!(buf, "{} {}", color::yellow("[+]"), record.args()),
+            Level::Trace => writeln!(buf, "{} {}", color::gray("[+]"), record.args()),
         })
         .init();
 
     'main_loop: loop {
         if manager.is_shell_remote {
             let session_id = manager.current_session_id.unwrap();
-            let session_metadata = session::get_metadata(session_id);
+            let session_metadata = match session::get_metadata(session_id) {
+                Ok(m) => m,
+                Err(e) => {
+                    print_error("failed to get session metadata", e);
+                    manager.is_shell_remote = false;
+                    continue 'main_loop;
+                }
+            };
 
             let prompt = format!(
-                "{} {} {} ",
-                color::red("[sayo]"),
-                color::blue(&format!(
-                    "{}@{}:{}",
-                    session_metadata.username,
-                    session_metadata.address, // manager.current_session.unwrap().address.to_string()
-                    session_metadata.cwd
-                )),
-                color::red(">")
+                "{} ",
+                color::red(&format!("[sayo][{}]>", session_metadata.cwd))
             );
 
             let readline = rl.readline(&prompt);
@@ -61,16 +61,25 @@ async fn main() {
                 }
             }
 
-            let line = readline.unwrap();
+            let line = match readline {
+                Ok(l) => l,
+                Err(e) => {
+                    print_error("failed to read line", anyhow!(e));
+                    break;
+                }
+            };
 
             if line == "exit" {
                 manager.is_shell_remote = false;
                 continue;
             }
 
-            session::execute_command_prettily(session_id, line.as_bytes()).await;
+            if let Err(e) = session::execute_command_prettily(session_id, line.as_bytes()).await {
+                print_error("failed to execute command", e);
+                break;
+            }
         } else {
-            let prompt = format!("{}", color::red("[sayo] > "));
+            let prompt = format!("{} ", color::red("[sayo]>"));
             let readline = rl.readline(&prompt);
 
             if let Err(e) = &readline {
@@ -95,11 +104,6 @@ async fn main() {
             }
 
             let command = input.first().unwrap();
-
-            // if command == "help" {
-            // help_cmd(CommandArgs::new());
-            // println!();
-            // }
 
             if let Some(args) = input.get(1..) {
                 let ret = crate::command::execute_command(

@@ -1,3 +1,5 @@
+use log::error;
+
 pub mod color {
     #[allow(dead_code)]
     pub fn red(text: &str) -> String {
@@ -24,7 +26,7 @@ pub mod color {
         format!("\x1b[36m{}\x1b[0m", text)
     }
     #[allow(dead_code)]
-    pub fn white(text: &str) -> String {
+    pub fn gray(text: &str) -> String {
         format!("\x1b[37m{}\x1b[0m", text)
     }
     #[allow(dead_code)]
@@ -35,4 +37,41 @@ pub mod color {
 
 pub fn tidy_usage(c: &str, d: &str) -> String {
     format!("  {}{}{}", c, " ".repeat(23 - c.len()), d)
+}
+
+pub fn print_error(msg: &str, e: anyhow::Error) {
+    let mut error_list = vec![];
+
+    error_list.push(msg.to_string());
+    error_list.push(e.to_string());
+
+    let mut err = match e.source() {
+        Some(e) => e,
+        None => {
+            for (i, e) in error_list.iter().rev().enumerate() {
+                if i == 0 {
+                    error!("{}", e);
+                } else {
+                    error!(" -> {}", e);
+                }
+            }
+            return;
+        }
+    };
+
+    loop {
+        error_list.push(err.to_string());
+        err = match err.source() {
+            Some(e) => e,
+            None => break,
+        }
+    }
+
+    for (i, e) in error_list.iter().rev().enumerate() {
+        if i == 0 {
+            error!("{}", e);
+        } else {
+            error!("{} -> {}", " ".repeat(i), e);
+        }
+    }
 }
