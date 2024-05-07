@@ -42,19 +42,23 @@ pub fn tidy_usage(c: &str, d: &str) -> String {
 pub fn print_error(msg: &str, e: anyhow::Error) {
     let mut error_list = vec![];
 
+    let print = |list: &[String]| {
+        for (i, e) in list.iter().enumerate() {
+            if i == 0 {
+                error!("{}", e);
+            } else {
+                error!("{}<- {}", " ".repeat(i * 2), e);
+            }
+        }
+    };
+
     error_list.push(msg.to_string());
     error_list.push(e.to_string());
 
     let mut err = match e.source() {
         Some(e) => e,
         None => {
-            for (i, e) in error_list.iter().rev().enumerate() {
-                if i == 0 {
-                    error!("{}", e);
-                } else {
-                    error!(" -> {}", e);
-                }
-            }
+            print(&error_list);
             return;
         }
     };
@@ -67,11 +71,5 @@ pub fn print_error(msg: &str, e: anyhow::Error) {
         }
     }
 
-    for (i, e) in error_list.iter().rev().enumerate() {
-        if i == 0 {
-            error!("{}", e);
-        } else {
-            error!("{} -> {}", " ".repeat(i), e);
-        }
-    }
+    print(&error_list);
 }
