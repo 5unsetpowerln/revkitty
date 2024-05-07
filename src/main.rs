@@ -43,7 +43,7 @@ async fn main() {
 
             let prompt = format!(
                 "{} ",
-                color::red(&format!("[sayo][{}]>", session_metadata.cwd))
+                color::blue(&format!("[sayo][{}]>", session_metadata.cwd))
             );
 
             let readline = rl.readline(&prompt);
